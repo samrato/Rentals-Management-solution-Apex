@@ -3,6 +3,13 @@
   margin: 0 auto;
 }
 
+.dashboard-container > .dash-grid,
+.analytics-section,
+.dashboard-container > section,
+.dashboard-container > .floating-reference {
+  will-change: transform, opacity;
+}
+
 .dash-header {
   display: flex;
   justify-content: space-between;
@@ -31,6 +38,10 @@
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 20px;
   margin-bottom: 40px;
+}
+
+.dash-grid > .floating-reference {
+  width: 100%;
 }
 
 .stat-card {
@@ -247,6 +258,63 @@
 
 .repair-form h3 {
   margin-bottom: 20px;
+}
+
+.analytics-section {
+  margin-bottom: 40px;
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.chart-card {
+  padding: 22px;
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.chart-card-header h3 {
+  font-size: 1.02rem;
+  margin-bottom: 6px;
+}
+
+.chart-card-header p {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.chart-card-body {
+  flex: 1;
+  min-height: 260px;
+}
+
+.chart-hint-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.chart-hint-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .form-group {
@@ -554,4 +622,223 @@
   line-height: 1.6;
   font-size: 0.95rem;
   opacity: 0.9;
+}
+
+.dashboard-error {
+  margin-top: 1rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.btn-sm {
+  padding: 0.5rem 0.85rem;
+  font-size: 0.85rem;
+}
+
+.notifications-section,
+.organization-section,
+.pending-approvals-section,
+.lease-section,
+.property-section,
+.tenant-details {
+  margin-bottom: 40px;
+}
+
+.notification-grid,
+.organization-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.notification-item,
+.organization-item,
+.unit-card {
+  padding: 20px;
+}
+
+.notification-item.unread {
+  border-top: 3px solid var(--primary);
+}
+
+.notification-item.read {
+  opacity: 0.8;
+}
+
+.notification-header,
+.notification-footer,
+.organization-meta,
+.property-meta,
+.repair-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.notification-footer,
+.organization-meta,
+.property-meta,
+.repair-meta {
+  margin-top: 16px;
+}
+
+.organization-item h3 {
+  margin-bottom: 8px;
+}
+
+.organization-item p {
+  color: var(--text-muted);
+}
+
+.pending-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.pending-item {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pending-user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.selection-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.pending-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.lease-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.wide-modal {
+  max-width: 760px;
+}
+
+.header-badge {
+  animation: badge-float 4.8s ease-in-out infinite;
+}
+
+@keyframes badge-float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.unit-grid-modal {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.status-badge.overdue,
+.status-badge.failed,
+.status-badge.maintenance,
+.status-badge.occupied,
+.status-badge.vacant,
+.status-badge.reserved,
+.status-badge.active,
+.status-badge.trial,
+.status-badge.cancelled {
+  border: 1px solid transparent;
+}
+
+.status-badge.overdue {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.3);
+}
+
+.status-badge.failed,
+.status-badge.rejected,
+.status-badge.cancelled {
+  background: rgba(127, 29, 29, 0.18);
+  color: #fca5a5;
+  border-color: rgba(252, 165, 165, 0.3);
+}
+
+.status-badge.occupied,
+.status-badge.active {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.25);
+}
+
+.status-badge.vacant,
+.status-badge.trial {
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+  border-color: rgba(96, 165, 250, 0.25);
+}
+
+.status-badge.reserved,
+.status-badge.maintenance {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.25);
+}
+
+@media (max-width: 900px) {
+  .dash-header,
+  .section-header,
+  .payment-actions,
+  .notification-header,
+  .notification-footer,
+  .organization-meta,
+  .property-meta,
+  .repair-meta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .details-grid,
+  .lease-grid,
+  .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .payment-table {
+    min-width: 760px;
+  }
+
+  .pending-actions,
+  .property-footer,
+  .repair-footer,
+  .modal-actions {
+    flex-wrap: wrap;
+  }
+
+  .chart-card {
+    min-height: 320px;
+  }
 }

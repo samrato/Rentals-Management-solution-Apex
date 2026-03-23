@@ -203,7 +203,23 @@
 }
 
 @media (max-width: 768px) {
+  .community-page {
+    height: auto;
+    min-height: calc(100vh - 160px);
+  }
+
   .community-sidebar {
     display: none;
+  }
+
+  .chat-header,
+  .chat-input,
+  .emoji-picker,
+  .message-list {
+    padding-inline: 18px;
+  }
+
+  .message-item {
+    max-width: 88%;
   }
 }
