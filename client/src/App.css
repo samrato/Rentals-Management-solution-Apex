@@ -7,7 +7,7 @@
 .main-content {
   flex: 1;
   padding: 2rem;
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
   width: 100%;
 }
@@ -118,5 +118,40 @@
 
   .user-name {
     order: 1;
+  }
+}
+
+@media (max-width: 560px) {
+  .main-content {
+    padding: 1rem 0.85rem;
+  }
+
+  .nav-logo {
+    font-size: 1.2rem;
+  }
+
+  .nav-links {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .nav-links > .floating-reference {
+    width: 100%;
+  }
+
+  .nav-links > .floating-reference > a,
+  .nav-links > .floating-reference > button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .user-name {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .btn-logout {
+    align-self: flex-start;
   }
 }

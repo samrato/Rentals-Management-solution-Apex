@@ -39,6 +39,25 @@ textarea {
   font: inherit;
 }
 
+select {
+  color-scheme: dark;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #7dd3fc 50%),
+    linear-gradient(135deg, #7dd3fc 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% - 2px),
+    calc(100% - 12px) calc(50% - 2px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 2.75rem;
+}
+
+select option,
+select optgroup {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
 .glass-card {
   background: var(--bg-card);
   backdrop-filter: blur(12px);
@@ -167,4 +186,71 @@ textarea {
   font-size: 0.84rem;
   color: #cbd5e1;
   margin-left: 0.2rem;
+}
+
+.flex {
+  display: flex;
+}
+
+.flex-col {
+  flex-direction: column;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.justify-center {
+  justify-content: center;
+}
+
+.gap-2 {
+  gap: 0.5rem;
+}
+
+.gap-4 {
+  gap: 1rem;
+}
+
+.h-full {
+  height: 100%;
+}
+
+.opacity-50 {
+  opacity: 0.5;
+}
+
+.mt-4 {
+  margin-top: 1rem;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.text-red-500 {
+  color: #f87171;
+}
+
+.text-primary {
+  color: var(--primary);
+}
+
+.text-secondary {
+  color: var(--secondary);
+}
+
+.animate-pulse {
+  animation: utility-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes utility-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.72;
+    transform: scale(0.98);
+  }
 }

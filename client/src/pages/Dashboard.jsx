@@ -79,6 +79,14 @@ const emptyPropertyDraft = {
   units: ''
 };
 
+const emptyUnitDraft = {
+  unitNumber: '',
+  rentAmount: '',
+  occupancyStatus: 'vacant',
+  water: '',
+  electricity: ''
+};
+
 const StatCard = ({ color = 'var(--primary)', highlight = false, hint, icon, label, subtext, value }) => {
   const content = (
     <div className={`stat-card glass-card ${highlight ? 'highlight-pulse' : ''}`}>
@@ -409,6 +417,10 @@ const Dashboard = () => {
   const [showPropertyForm, setShowPropertyForm] = useState(false);
   const [newProperty, setNewProperty] = useState(emptyPropertyDraft);
   const [editingPropertyId, setEditingPropertyId] = useState(null);
+  const [showUnitForm, setShowUnitForm] = useState(false);
+  const [editingUnitId, setEditingUnitId] = useState(null);
+  const [unitDraft, setUnitDraft] = useState(emptyUnitDraft);
+  const [unitSaving, setUnitSaving] = useState(false);
   const [pendingRegistrations, setPendingRegistrations] = useState([]);
   const [approvalLoading, setApprovalLoading] = useState('');
   const [approvalAmounts, setApprovalAmounts] = useState({});
@@ -882,6 +894,14 @@ const Dashboard = () => {
     }
   }, [activeWorkspaceSection]);
 
+  useEffect(() => {
+    if (!selectedProperty) {
+      setShowUnitForm(false);
+      setEditingUnitId(null);
+      setUnitDraft(emptyUnitDraft);
+    }
+  }, [selectedProperty]);
+
   const managementSections = [
     {
       id: 'overview',
@@ -953,6 +973,71 @@ const Dashboard = () => {
       }
     ]
     : managementSections;
+
+  const resetUnitEditor = () => {
+    setShowUnitForm(false);
+    setEditingUnitId(null);
+    setUnitDraft(emptyUnitDraft);
+  };
+
+  const handleUnitSubmit = async (event) => {
+    event.preventDefault();
+
+    if (!selectedProperty) {
+      return;
+    }
+
+    setUnitSaving(true);
+
+    const payload = {
+      propertyId: selectedProperty._id,
+      unitNumber: unitDraft.unitNumber.trim(),
+      rentAmount: Number(unitDraft.rentAmount || 0),
+      occupancyStatus: unitDraft.occupancyStatus,
+      meterReadings: {
+        water: Number(unitDraft.water || 0),
+        electricity: Number(unitDraft.electricity || 0)
+      }
+    };
+
+    try {
+      if (editingUnitId) {
+        await unitService.updateUnit(editingUnitId, payload);
+        await showToast({
+          icon: 'success',
+          title: 'Unit Updated',
+          text: `Unit ${payload.unitNumber} has been updated.`
+        });
+      } else {
+        await unitService.createUnit(payload);
+        await showToast({
+          icon: 'success',
+          title: 'Unit Added',
+          text: `Unit ${payload.unitNumber} is now available in ${selectedProperty.name}.`
+        });
+      }
+
+      resetUnitEditor();
+      await handleOpenUnits(selectedProperty);
+      loadDashboard();
+    } catch (requestError) {
+      await showErrorAlert('Unit Save Failed', getApiErrorMessage(requestError, 'Failed to save the unit.'));
+    } finally {
+      setUnitSaving(false);
+    }
+  };
+
+  const handleEditUnit = (unit) => {
+    setEditingUnitId(unit._id);
+    setUnitDraft({
+      unitNumber: unit.unitNumber || '',
+      rentAmount: unit.rentAmount ?? '',
+      occupancyStatus: unit.occupancyStatus || 'vacant',
+      water: unit.meterReadings?.water ?? '',
+      electricity: unit.meterReadings?.electricity ?? ''
+    });
+    setShowUnitForm(true);
+  };
 
   if (!user && !sessionLoading) {
     return <Landing />;
@@ -1522,8 +1607,85 @@ const Dashboard = () => {
                   <div className="payment-modal glass-card wide-modal">
                     <div className="section-header">
                       <h3>Units for {selectedProperty.name}</h3>
-                      <button onClick={() => setSelectedProperty(null)} className="btn-secondary" type="button">Close</button>
+                      <div className="modal-inline-actions">
+                        <button
+                          onClick={() => {
+                            setShowUnitForm(true);
+                            setEditingUnitId(null);
+                            setUnitDraft(emptyUnitDraft);
+                          }}
+                          className="btn-primary"
+                          type="button"
+                        >
+                          <Plus size={16} /> Add Unit
+                        </button>
+                        <button onClick={() => setSelectedProperty(null)} className="btn-secondary" type="button">Close</button>
+                      </div>
                     </div>
+                    {showUnitForm && (
+                      <form className="unit-editor glass-card" onSubmit={handleUnitSubmit}>
+                        <div className="section-header">
+                          <h4>{editingUnitId ? 'Edit Unit' : 'New Unit'}</h4>
+                          <button type="button" className="btn-secondary btn-sm" onClick={resetUnitEditor}>Cancel</button>
+                        </div>
+                        <div className="unit-editor-grid">
+                          <div className="form-group">
+                            <label>Unit Number</label>
+                            <input
+                              type="text"
+                              value={unitDraft.unitNumber}
+                              onChange={(event) => setUnitDraft({ ...unitDraft, unitNumber: event.target.value })}
+                              placeholder="A1"
+                              required
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Rent Amount</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={unitDraft.rentAmount}
+                              onChange={(event) => setUnitDraft({ ...unitDraft, rentAmount: event.target.value })}
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Status</label>
+                            <select
+                              value={unitDraft.occupancyStatus}
+                              onChange={(event) => setUnitDraft({ ...unitDraft, occupancyStatus: event.target.value })}
+                            >
+                              <option value="vacant">Vacant</option>
+                              <option value="occupied">Occupied</option>
+                              <option value="reserved">Reserved</option>
+                              <option value="maintenance">Maintenance</option>
+                            </select>
+                          </div>
+                          <div className="form-group">
+                            <label>Water Meter</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={unitDraft.water}
+                              onChange={(event) => setUnitDraft({ ...unitDraft, water: event.target.value })}
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Electricity Meter</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={unitDraft.electricity}
+                              onChange={(event) => setUnitDraft({ ...unitDraft, electricity: event.target.value })}
+                            />
+                          </div>
+                        </div>
+                        <div className="form-actions">
+                          <button type="submit" className="btn-primary" disabled={unitSaving}>
+                            {unitSaving ? 'Saving...' : editingUnitId ? 'Save Unit' : 'Create Unit'}
+                          </button>
+                        </div>
+                      </form>
+                    )}
                     {unitsLoading ? (
                       <p className="empty-msg">Loading units...</p>
                     ) : propertyUnits.length > 0 ? (
@@ -1537,6 +1699,11 @@ const Dashboard = () => {
                             <p>{formatCurrency(unit.rentAmount)}</p>
                             <p className="date">Water: {unit.meterReadings?.water || 0}</p>
                             <p className="date">Electricity: {unit.meterReadings?.electricity || 0}</p>
+                            <div className="unit-card-actions">
+                              <button type="button" className="btn-secondary btn-sm" onClick={() => handleEditUnit(unit)}>
+                                Edit
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
