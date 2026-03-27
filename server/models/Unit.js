@@ -15,7 +15,8 @@ const unitSchema = new mongoose.Schema({
     water: { type: Number, default: 0 },
     electricity: { type: Number, default: 0 }
   },
-  isActive: { type: Boolean, default: true }
+  isActive: { type: Boolean, default: true },
+  images: [{ type: String }]
 }, { timestamps: true });
 
 unitSchema.index({ property: 1, unitNumber: 1 }, { unique: true });

@@ -10,7 +10,9 @@ const propertySchema = new mongoose.Schema({
   manager: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   caretakers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   units: [{ type: String, trim: true }],
-  images: [{ type: String }]
+  images: [{ type: String }],
+  latePenaltyAmount: { type: Number, default: 0 },
+  latePenaltyType: { type: String, enum: ['flat', 'percentage'], default: 'flat' }
 }, { timestamps: true });
 
 module.exports = mongoose.models.Property || mongoose.model('Property', propertySchema);

@@ -41,11 +41,15 @@ const createUpload = (folder, allowedPattern) => multer({
 
 const leaseUpload = createUpload('leases', /pdf|doc|docx|jpg|jpeg|png/);
 const repairUpload = createUpload('repairs');
+const propertyUpload = createUpload('properties');
+const unitUpload = createUpload('units');
 
 const toStoredUploadPath = (absolutePath) => path.relative(rootDir, absolutePath).replace(/\\/g, '/');
 
 module.exports = {
   leaseUpload,
   repairUpload,
+  propertyUpload,
+  unitUpload,
   toStoredUploadPath
 };

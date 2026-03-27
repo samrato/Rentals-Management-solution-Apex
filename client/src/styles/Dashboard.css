@@ -24,10 +24,45 @@
   color: #7dd3fc;
 }
 
-.header-text p,
 .pending-card p {
   color: var(--text-muted);
   line-height: 1.7;
+}
+
+.move-in-summary {
+  width: 100%;
+  padding: 24px !important;
+  background: rgba(125, 211, 252, 0.05) !important;
+  border: 1px solid rgba(125, 211, 252, 0.1) !important;
+  border-radius: 20px;
+  text-align: left;
+}
+
+.move-in-summary h4 {
+  color: #7dd3fc;
+  margin-bottom: 16px;
+  font-size: 1.1rem;
+  letter-spacing: 0.02em;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: 0.95rem;
+}
+
+.summary-row span {
+  color: var(--text-muted);
+}
+
+.summary-total {
+  display: flex;
+  justify-content: space-between;
+  font-size: 1.1rem;
+  font-weight: 700;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 12px;
 }
 
 .workspace-shell {

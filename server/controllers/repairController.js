@@ -1,9 +1,10 @@
-const { Property, RepairRequest } = require('../models');
+const { Property, RepairRequest, User } = require('../models');
 const { logRequestAudit } = require('../helpers/audit');
 const { sendError } = require('../helpers/apiResponse');
 const { createNotification } = require('../helpers/notifications');
 const { ROLES } = require('../helpers/rbac');
 const { toStoredUploadPath } = require('../helpers/upload');
+const { sendRepairRequestNotification, sendRepairStatusUpdate } = require('../services/emailService');
 
 const managementRoles = [
   ROLES.LANDLORD,
@@ -43,7 +44,7 @@ const getRepairRequests = async (req, res) => {
 };
 
 const createRepairRequest = async (req, res) => {
-  const property = await Property.findById(req.body.propertyId).select('organization landlord');
+  const property = await Property.findById(req.body.propertyId).select('name organization landlord');
 
   const repairRequest = new RepairRequest({
     organization: property?.organization,
@@ -65,6 +66,21 @@ const createRepairRequest = async (req, res) => {
       message: `A new maintenance request was submitted for unit ${req.body.unit}.`,
       type: 'maintenance_update'
     });
+
+    const [landlordUser, tenantUser] = await Promise.all([
+      User.findById(property.landlord),
+      User.findById(req.user.id)
+    ]);
+
+    if (landlordUser?.email) {
+      sendRepairRequestNotification(
+        landlordUser.email,
+        tenantUser?.name || 'A Tenant',
+        property.name || 'Property',
+        req.body.unit,
+        req.body.description
+      );
+    }
   }
 
   await logRequestAudit({
@@ -110,6 +126,17 @@ const updateRepairRequest = async (req, res) => {
     message: `Your maintenance request for unit ${repairRequest.unit} is now ${repairRequest.status}.`,
     type: 'maintenance_update'
   });
+
+  if (repairRequest.tenant?.email) {
+    sendRepairStatusUpdate(
+      repairRequest.tenant.email,
+      repairRequest.tenant.name,
+      repairRequest.property?.name || 'Property',
+      repairRequest.unit,
+      repairRequest.status,
+      repairRequest.landlordResponse
+    );
+  }
 
   await logRequestAudit({
     req,

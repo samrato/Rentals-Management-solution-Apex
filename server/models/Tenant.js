@@ -9,8 +9,8 @@ const tenantSchema = new mongoose.Schema({
   dueDate: { type: Number, default: 1 },
   status: {
     type: String,
-    enum: ['active', 'defaulted', 'moved_out', 'pending'],
-    default: 'active'
+    enum: ['active', 'defaulted', 'moved_out', 'pending', 'pending_activation', 'expired'],
+    default: 'pending_activation'
   },
   startDate: { type: Date, default: Date.now },
   leaseStart: { type: Date },

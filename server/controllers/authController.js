@@ -1,9 +1,13 @@
 const jwt = require('jsonwebtoken');
-const { Organization, Property, Tenant, User } = require('../models');
+const { Organization, Property, Tenant, Unit, User } = require('../models');
 const { logAudit } = require('../helpers/audit');
 const { jwtSecret } = require('../config/env');
 const { sendError } = require('../helpers/apiResponse');
 const { ROLES } = require('../helpers/rbac');
+const { 
+  sendLandlordWelcome, 
+  sendTenantApplicationNotification 
+} = require('../services/emailService');
 
 const managerRoles = [ROLES.LANDLORD, ROLES.PROPERTY_MANAGER];
 
@@ -20,18 +24,43 @@ const buildUserResponse = (user) => ({
 });
 
 const getAvailableProperties = async (req, res) => {
-  const properties = await Property.find();
+  const { organizationId } = req.query;
+  const query = { landlord: { $ne: null } };
+  
+  if (organizationId) {
+    query.organization = organizationId;
+  }
 
-  const availableProperties = await Promise.all(properties.map(async (property) => {
-    const activeTenants = await Tenant.find({ property: property._id, status: 'active' });
-    const occupiedUnits = activeTenants.map((tenant) => tenant.unit);
-    const unoccupiedUnits = (property.units || []).filter((unit) => !occupiedUnits.includes(unit));
+  const properties = await Property.find(query);
+
+  const availableProperties = await Promise.all(properties.map(async (p) => {
+    // A unit is available if it exists in the Unit models as 'vacant' 
+    // AND it's not currently assigned to an 'active' tenant record.
+    const [activeTenants, vacantUnitDocs] = await Promise.all([
+      Tenant.find({ property: p._id, status: 'active' }),
+      Unit.find({ property: p._id, occupancyStatus: 'vacant', isActive: true })
+    ]);
+
+    const occupiedUnitNumbers = activeTenants.map((t) => t.unit);
+    const trulyVacantUnits = vacantUnitDocs
+      .filter(doc => !occupiedUnitNumbers.includes(doc.unitNumber))
+      .map(doc => doc.unitNumber);
+
+    const unitDetails = {};
+    vacantUnitDocs.forEach((doc) => {
+      unitDetails[doc.unitNumber] = {
+        rentAmount: doc.rentAmount,
+        images: doc.images
+      };
+    });
 
     return {
-      _id: property._id,
-      name: property.name,
-      address: property.address,
-      units: unoccupiedUnits
+      _id: p._id,
+      name: p.name,
+      address: p.address,
+      images: p.images,
+      units: trulyVacantUnits,
+      unitDetails
     };
   }));
 
@@ -42,7 +71,7 @@ const register = async (req, res) => {
   const { name, email, password, role, interestedProperty, interestedUnit, phoneNumber } = req.body;
 
   if (!name || !email || !password || !role) {
-    sendError(res, 400, 'Name, email, password and role are required');
+    sendError(res, 400, 'Enter all the details');
     return;
   }
 
@@ -53,7 +82,7 @@ const register = async (req, res) => {
 
   const existingUser = await User.findOne({ email });
   if (existingUser) {
-    sendError(res, 400, 'User with this email already exists');
+    sendError(res, 400, 'User already exists');
     return;
   }
 
@@ -119,6 +148,22 @@ const register = async (req, res) => {
     status: user.status,
     organizationId
   });
+
+  // Background email notifications
+  if (role === ROLES.LANDLORD) {
+    sendLandlordWelcome(email, name);
+  } else if (role === ROLES.TENANT && interestedProperty) {
+    Property.findById(interestedProperty).populate('landlord').then(property => {
+      if (property && property.landlord && property.landlord.email) {
+        sendTenantApplicationNotification(
+          property.landlord.email,
+          name,
+          property.name,
+          interestedUnit
+        );
+      }
+    });
+  }
 };
 
 const login = async (req, res) => {

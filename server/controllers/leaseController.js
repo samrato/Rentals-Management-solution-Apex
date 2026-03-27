@@ -1,6 +1,7 @@
 const path = require('path');
-const { Lease, Property } = require('../models');
+const { Lease, Property, Tenant } = require('../models');
 const { logRequestAudit } = require('../helpers/audit');
+const { createRentInvoice, createDepositInvoice } = require('../controllers/invoiceController');
 const { rootDir } = require('../config/env');
 const { sendError } = require('../helpers/apiResponse');
 const { createNotification } = require('../helpers/notifications');
@@ -52,6 +53,35 @@ const uploadLease = async (req, res) => {
   });
 
   await lease.save();
+
+  // Automatically generate first invoice if lease starts today or earlier
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const leaseStart = new Date(startDate);
+  leaseStart.setHours(0, 0, 0, 0);
+
+  if (leaseStart <= today) {
+    const tenant = await Tenant.findOne({ user: tenantId });
+    if (tenant) {
+      await createRentInvoice(
+        tenant._id,
+        propertyId,
+        tenant.rentAmount,
+        new Date(startDate),
+        property.organization
+      );
+
+      // Also generate deposit invoice if it exists
+      if (Number(depositAmount) > 0) {
+        await createDepositInvoice(
+          tenant._id,
+          propertyId,
+          depositAmount,
+          property.organization
+        );
+      }
+    }
+  }
 
   await createNotification({
     organization: property.organization,

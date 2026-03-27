@@ -11,8 +11,10 @@ export const authService = {
     return response.data;
   },
 
-  async getAvailableProperties() {
-    const response = await api.get('/auth/properties/available');
+  async getAvailableProperties(organizationId) {
+    const response = await api.get('/auth/properties/available', {
+      params: { organizationId }
+    });
     return response.data;
   },
 

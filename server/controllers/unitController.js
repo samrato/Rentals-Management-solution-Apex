@@ -1,6 +1,7 @@
 const { Property, Unit } = require('../models');
 const { logRequestAudit } = require('../helpers/audit');
 const { sendError } = require('../helpers/apiResponse');
+const { toStoredUploadPath } = require('../helpers/upload');
 const { ROLES } = require('../helpers/rbac');
 
 const manageRoles = [ROLES.LANDLORD, ROLES.PROPERTY_MANAGER, ROLES.SUPER_ADMIN];
@@ -59,6 +60,7 @@ const createUnit = async (req, res) => {
     rentAmount: Number(req.body.rentAmount || 0),
     occupancyStatus: req.body.occupancyStatus || 'vacant',
     meterReadings: req.body.meterReadings || {},
+    images: req.files ? req.files.map((file) => toStoredUploadPath(file.path)) : [],
     isActive: true
   }, {
     new: true,
@@ -115,6 +117,9 @@ const updateUnit = async (req, res) => {
   unit.rentAmount = req.body.rentAmount ?? unit.rentAmount;
   unit.occupancyStatus = req.body.occupancyStatus || unit.occupancyStatus;
   unit.meterReadings = req.body.meterReadings || unit.meterReadings;
+  unit.images = req.files && req.files.length > 0
+    ? req.files.map((file) => toStoredUploadPath(file.path))
+    : (req.body.images || unit.images);
   unit.isActive = req.body.isActive ?? unit.isActive;
   await unit.save();
 

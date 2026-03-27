@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { Building, Home, Lock, LogIn, Mail, ShieldCheck } from 'lucide-react';
+import { Building, Eye, EyeOff, Home, Lock, LogIn, Mail, ShieldCheck } from 'lucide-react';
 import { useSession } from '../hooks/useSession';
 import { showErrorAlert, showToast } from '../lib/alerts';
 import { getApiErrorMessage } from '../lib/api';
@@ -12,6 +12,7 @@ const Login = () => {
   const { isAuthenticated, loading: sessionLoading, signIn } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -80,13 +81,22 @@ const Login = () => {
             </div>
             <div className="form-group">
               <label><Lock size={14} style={{ marginRight: '5px' }} /> Password</label>
-              <input
-                type="password"
-                placeholder="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
+              <div className="password-input-wrapper">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
             <button type="submit" className="btn-primary w-full" disabled={submitting}>
               <LogIn size={18} style={{ marginRight: '8px' }} />

@@ -3,22 +3,24 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
-const consumerKey = process.env.MPESA_CONSUMER_KEY;
-const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
-const shortCode = process.env.MPESA_SHORTCODE;
-const passkey = process.env.MPESA_PASSKEY;
-const callbackUrl = process.env.MPESA_CALLBACK_URL;
+const consumerKey = (process.env.MPESA_CONSUMER_KEY || '').trim();
+const consumerSecret = (process.env.MPESA_CONSUMER_SECRET || '').trim();
+const shortCode = (process.env.MPESA_SHORTCODE || '').trim();
+const passkey = (process.env.MPESA_PASSKEY || '').trim();
+const callbackUrl = (process.env.MPESA_CALLBACK_URL || '').trim();
 
 const getAccessToken = async () => {
   const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
+  
   try {
     const res = await axios.get('https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials', {
       headers: { Authorization: `Basic ${auth}` }
     });
     return res.data.access_token;
   } catch (err) {
-    console.error("Mpesa Auth Error:", err.response?.data || err.message);
-    throw new Error("Failed to get Mpesa access token");
+    const errorData = err.response?.data || err.message;
+    console.error("Mpesa Auth Error Details:", JSON.stringify(errorData, null, 2));
+    throw new Error(`Failed to get Mpesa access token: ${errorData.errorMessage || err.message}`);
   }
 };
 
@@ -47,8 +49,9 @@ const initiateSTKPush = async (phoneNumber, amount, accountReference) => {
     });
     return res.data;
   } catch (err) {
-    console.error("STK Push Error:", err.response?.data || err.message);
-    throw new Error("Failed to initiate STK Push");
+    const errorData = err.response?.data || err.message;
+    console.error("STK Push Error Details:", JSON.stringify(errorData, null, 2));
+    throw new Error(`Failed to initiate STK Push: ${errorData.errorMessage || err.message}`);
   }
 };
 

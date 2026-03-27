@@ -9,7 +9,7 @@ const { errorHandler, notFound } = require('./middleware/errorHandler');
 
 const app = express();
 
-for (const dir of ['leases', 'repairs']) {
+for (const dir of ['leases', 'repairs', 'properties', 'units']) {
   fs.mkdirSync(path.join(uploadsRoot, dir), { recursive: true });
 }
 

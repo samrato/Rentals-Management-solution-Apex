@@ -16,6 +16,7 @@ import {
   Plus,
   ScrollText,
   Sparkles,
+  Trash2,
   Upload,
   Users,
   Wrench
@@ -40,14 +41,16 @@ import { useSession } from '../hooks/useSession';
 import { getApiErrorMessage } from '../lib/api';
 import { adminService } from '../services/adminService';
 import { leaseService } from '../services/leaseService';
+import { invoiceService } from '../services/invoiceService';
 import { notificationService } from '../services/notificationService';
 import { paymentService } from '../services/paymentService';
 import { propertyService } from '../services/propertyService';
 import { reminderService } from '../services/reminderService';
 import { repairService } from '../services/repairService';
 import { suggestionService } from '../services/suggestionService';
+import { tenantService } from '../services/tenantService';
 import { unitService } from '../services/unitService';
-import { formatCurrency, formatDate } from '../utils/format';
+import { formatCurrency, formatDate, formatMpesaPhoneNumber } from '../utils/format';
 import { downloadBlob, openBlobInNewTab } from '../utils/files';
 import { formatRoleLabel, isManagementRole, isStaffRole, ROLES } from '../utils/roles';
 import '../styles/Dashboard.css';
@@ -64,7 +67,7 @@ const emptyLeaseDraft = {
   tenantId: '',
   propertyId: '',
   unit: '',
-  startDate: '',
+  startDate: new Date().toISOString().split('T')[0],
   endDate: '',
   depositAmount: '',
   penaltyTerms: '',
@@ -76,7 +79,11 @@ const emptyPropertyDraft = {
   address: '',
   description: '',
   type: 'apartment',
-  units: ''
+  units: '',
+  latePenaltyAmount: '',
+  latePenaltyType: 'flat',
+  defaultUnitPrice: '',
+  images: []
 };
 
 const emptyUnitDraft = {
@@ -84,7 +91,8 @@ const emptyUnitDraft = {
   rentAmount: '',
   occupancyStatus: 'vacant',
   water: '',
-  electricity: ''
+  electricity: '',
+  images: []
 };
 
 const StatCard = ({ color = 'var(--primary)', highlight = false, hint, icon, label, subtext, value }) => {
@@ -402,13 +410,16 @@ const Dashboard = () => {
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [unitsLoading, setUnitsLoading] = useState(false);
   const [repairRequests, setRepairRequests] = useState([]);
+  const [tenants, setTenants] = useState([]);
   const [showRepairForm, setShowRepairForm] = useState(false);
   const [newRepair, setNewRepair] = useState(emptyRepairDraft);
   const [payments, setPayments] = useState([]);
+  const [invoices, setInvoices] = useState([]);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedRentAmount, setSelectedRentAmount] = useState(0);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
   const [leases, setLeases] = useState([]);
   const [leaseActionLoading, setLeaseActionLoading] = useState('');
   const [showLeaseForm, setShowLeaseForm] = useState(false);
@@ -431,12 +442,22 @@ const Dashboard = () => {
   const [organizations, setOrganizations] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [activeWorkspaceSection, setActiveWorkspaceSection] = useState('overview');
+  const [editingTenantId, setEditingTenantId] = useState(null);
+  const [editingRentAmount, setEditingRentAmount] = useState('');
 
   const userRole = user?.role;
   const isTenant = userRole === ROLES.TENANT;
   const isManagement = isManagementRole(userRole);
   const isStaff = isStaffRole(userRole);
   const isSuperAdmin = userRole === ROLES.SUPER_ADMIN;
+  
+  const latestPendingInvoice = isTenant 
+    ? invoices.find(invoice => invoice.status !== 'paid' && !invoice.lineItems?.some(li => li.label === 'Security Deposit'))
+    : null;
+
+  const latestPendingDeposit = isTenant
+    ? invoices.find(invoice => invoice.status !== 'paid' && invoice.lineItems?.some(li => li.label === 'Security Deposit'))
+    : null;
   const tenantLease = leases[0] || null;
   const tenantProperties = tenantLease?.property ? [tenantLease.property] : user?.interestedProperty ? [user.interestedProperty] : [];
   const currentTenantUnit = tenantLease?.unit || user?.interestedUnit || '';
@@ -511,17 +532,19 @@ const Dashboard = () => {
 
     try {
       if (isTenant) {
-        const [nextNotifications, nextRepairs, nextPayments, nextLease] = await Promise.all([
+        const [nextNotifications, nextRepairs, nextPayments, nextLease, nextInvoices] = await Promise.all([
           notificationService.getNotifications(),
           repairService.getRepairs(),
           paymentService.getPayments(),
-          leaseService.getTenantLease()
+          leaseService.getTenantLease(),
+          invoiceService.getInvoices()
         ]);
 
-        setNotifications(nextNotifications);
-        setRepairRequests(nextRepairs);
-        setPayments(nextPayments);
+        setNotifications(nextNotifications || []);
+        setRepairRequests(nextRepairs || []);
+        setPayments(nextPayments || []);
         setLeases(nextLease ? [nextLease] : []);
+        setInvoices(nextInvoices || []);
         setProperties([]);
         setPendingRegistrations([]);
         setSuggestions([]);
@@ -537,6 +560,8 @@ const Dashboard = () => {
           nextLeases,
           nextSuggestions,
           nextPendingRegistrations,
+          nextInvoices,
+          nextTenants,
           nextAdminSummary,
           nextOrganizations,
           nextAuditLogs
@@ -548,6 +573,8 @@ const Dashboard = () => {
           leaseService.getManagementLeases(),
           suggestionService.getSuggestions(),
           propertyService.getPendingRegistrations(),
+          invoiceService.getInvoices(),
+          tenantService.getTenants(),
           isSuperAdmin ? adminService.getSummary() : Promise.resolve(null),
           isSuperAdmin ? adminService.getOrganizations() : Promise.resolve([]),
           isSuperAdmin ? adminService.getAuditLogs() : Promise.resolve([])
@@ -559,10 +586,21 @@ const Dashboard = () => {
         setPayments(nextPayments);
         setLeases(nextLeases);
         setSuggestions(nextSuggestions);
-        setPendingRegistrations(nextPendingRegistrations);
+        setPendingRegistrations(nextPendingRegistrations || []);
+        setInvoices(nextInvoices || []);
+        setTenants(nextTenants || []);
+
+        // Auto-fill approval amounts with suggested rent from unit prices
+        const initialApprovalAmounts = {};
+        if (Array.isArray(nextPendingRegistrations)) {
+          nextPendingRegistrations.forEach((registration) => {
+            initialApprovalAmounts[registration._id] = registration.suggestedRent || '';
+          });
+        }
+        setApprovalAmounts(initialApprovalAmounts);
         setAdminSummary(nextAdminSummary);
-        setOrganizations(nextOrganizations);
-        setAuditLogs(nextAuditLogs);
+        setOrganizations(nextOrganizations || []);
+        setAuditLogs(nextAuditLogs || []);
       } else if (isStaff) {
         const [nextNotifications, nextRepairs] = await Promise.all([
           notificationService.getNotifications(),
@@ -626,10 +664,13 @@ const Dashboard = () => {
     setPaymentLoading(true);
 
     try {
+      const formattedPhone = formatMpesaPhoneNumber(phoneNumber);
+      
       await paymentService.initiateStkPush({
         amount: selectedRentAmount,
-        phoneNumber,
-        tenantId: user.id
+        phoneNumber: formattedPhone,
+        tenantId: user.id,
+        invoiceId: selectedInvoiceId
       });
       await showToast({
         icon: 'success',
@@ -642,6 +683,41 @@ const Dashboard = () => {
     } finally {
       setPaymentLoading(false);
     }
+  };
+
+  const handleActivateTenancy = async (tenantId, autoPay = false) => {
+    setLoading(true);
+    try {
+      const response = await tenantService.activateTenancy(tenantId);
+      await refreshSession();
+      
+      if (autoPay) {
+        // Find the newly created invoice to initiate payment
+        const nextInvoices = await invoiceService.getInvoices();
+        const firstInvoice = nextInvoices.find(i => i.status !== 'paid');
+        if (firstInvoice) {
+          handleInvoicePayment(firstInvoice);
+        }
+      } else {
+        setActiveWorkspaceSection('invoices');
+      }
+
+      await showToast({
+        icon: 'success',
+        title: 'Tenancy Started',
+        text: 'Your billing cycle has officially begun.'
+      });
+    } catch (requestError) {
+      await showErrorAlert('Activation Failed', getApiErrorMessage(requestError, 'Failed to activate your tenancy.'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInvoicePayment = (invoice) => {
+    setSelectedRentAmount(invoice.totalAmount);
+    setSelectedInvoiceId(invoice._id);
+    setShowPaymentModal(true);
   };
 
   const handleApproveRegistration = async (registration) => {
@@ -758,12 +834,22 @@ const Dashboard = () => {
 
   const handleLeaseTenantSelect = (tenantUserId) => {
     const selectedTenant = leaseTenants.find((tenant) => tenant.user?._id === tenantUserId);
-
-    setNewLease((currentLease) => ({
-      ...currentLease,
-      tenantId: tenantUserId,
-      unit: selectedTenant?.unit || ''
-    }));
+    if (selectedTenant) {
+      setNewLease((currentLease) => ({
+        ...currentLease,
+        tenantId: tenantUserId,
+        unit: selectedTenant.unit,
+        depositAmount: Number(selectedTenant.rentAmount || 0) * 2,
+        startDate: new Date().toISOString().split('T')[0], // Set default startDate to today
+        penaltyTerms: (() => {
+          const prop = properties.find((p) => p._id === currentLease.propertyId);
+          if (prop && prop.latePenaltyAmount > 0) {
+            return `Late payment attracts a ${prop.latePenaltyType === 'percentage' ? `${prop.latePenaltyAmount}%` : formatCurrency(prop.latePenaltyAmount)} penalty.`;
+          }
+          return '';
+        })()
+      }));
+    }
   };
 
   const handleViewLease = async (lease) => {
@@ -800,31 +886,67 @@ const Dashboard = () => {
   const handlePropertySubmit = async (event) => {
     event.preventDefault();
 
-    const payload = {
-      ...newProperty,
-      units: newProperty.units.split(',').map((unit) => unit.trim()).filter(Boolean)
-    };
+    const formData = new FormData();
+    formData.append('name', newProperty.name);
+    formData.append('type', newProperty.type);
+    formData.append('address', newProperty.address);
+    formData.append('description', newProperty.description);
+    formData.append('latePenaltyAmount', newProperty.latePenaltyAmount || 0);
+    formData.append('latePenaltyType', newProperty.latePenaltyType);
+    
+    newProperty.units.split(',').map((unit) => unit.trim()).filter(Boolean).forEach((unit) => {
+      formData.append('units', unit);
+    });
+    formData.append('defaultUnitPrice', newProperty.defaultUnitPrice || 0);
+
+    if (newProperty.images && newProperty.images.length > 0) {
+      newProperty.images.forEach((image) => {
+        formData.append('images', image);
+      });
+    }
 
     try {
       if (editingPropertyId) {
-        await propertyService.updateProperty(editingPropertyId, payload);
+        await propertyService.updateProperty(editingPropertyId, formData);
         await showToast({
           icon: 'success',
           title: 'Property Updated',
-          text: `${payload.name} has been updated.`
+          text: `${newProperty.name} has been updated.`
         });
       } else {
-        await propertyService.createProperty(payload);
+        await propertyService.createProperty(formData);
         await showToast({
           icon: 'success',
           title: 'Property Added',
-          text: `${payload.name} is now part of your portfolio.`
+          text: `${newProperty.name} is now part of your portfolio.`
         });
       }
 
       setShowPropertyForm(false);
       setEditingPropertyId(null);
-      setNewProperty(emptyPropertyDraft);
+      setNewProperty(emptyPropertyDraft);  const handleDeleteProperty = async (propertyId) => {
+    const confirmed = await confirmAction({
+      title: 'Delete Property?',
+      text: 'This will permanently remove the property and ALL associated units, tenants, and leases.',
+      icon: 'warning',
+      confirmButtonText: 'Yes, delete everything',
+      confirmButtonColor: '#ef4444'
+    });
+
+    if (!confirmed) return;
+
+    try {
+      await propertyService.deleteProperty(propertyId);
+      await showToast({
+        icon: 'success',
+        title: 'Property Deleted',
+        text: 'The property and all its data have been removed from your portfolio.'
+      });
+      loadDashboard();
+    } catch (requestError) {
+      await showErrorAlert('Deletion Failed', getApiErrorMessage(requestError, 'Failed to delete the property.'));
+    }
+  };
       loadDashboard();
     } catch (requestError) {
       await showErrorAlert('Save Failed', getApiErrorMessage(requestError, 'Failed to save property.'));
@@ -946,11 +1068,25 @@ const Dashboard = () => {
       badge: suggestions.length
     },
     {
+      id: 'invoices',
+      label: 'Invoices',
+      note: 'Billing and rent',
+      icon: ScrollText,
+      badge: invoices.filter(i => i.status !== 'paid').length
+    },
+    {
       id: 'repairs',
       label: 'Repairs',
       note: 'Maintenance queue',
       icon: Wrench,
       badge: repairRequests.filter((request) => request.status !== 'resolved').length
+    },
+    {
+      id: 'tenants',
+      label: 'Tenants',
+      note: 'Resident directory',
+      icon: Users,
+      badge: tenants.length
     }
   ];
 
@@ -989,31 +1125,34 @@ const Dashboard = () => {
 
     setUnitSaving(true);
 
-    const payload = {
-      propertyId: selectedProperty._id,
-      unitNumber: unitDraft.unitNumber.trim(),
-      rentAmount: Number(unitDraft.rentAmount || 0),
-      occupancyStatus: unitDraft.occupancyStatus,
-      meterReadings: {
-        water: Number(unitDraft.water || 0),
-        electricity: Number(unitDraft.electricity || 0)
-      }
-    };
+    const formData = new FormData();
+    formData.append('propertyId', selectedProperty._id);
+    formData.append('unitNumber', unitDraft.unitNumber.trim());
+    formData.append('rentAmount', Number(unitDraft.rentAmount || 0));
+    formData.append('occupancyStatus', unitDraft.occupancyStatus);
+    formData.append('water', Number(unitDraft.water || 0));
+    formData.append('electricity', Number(unitDraft.electricity || 0));
+
+    if (unitDraft.images && unitDraft.images.length > 0) {
+      unitDraft.images.forEach((image) => {
+        formData.append('images', image);
+      });
+    }
 
     try {
       if (editingUnitId) {
-        await unitService.updateUnit(editingUnitId, payload);
+        await unitService.updateUnit(editingUnitId, formData);
         await showToast({
           icon: 'success',
           title: 'Unit Updated',
-          text: `Unit ${payload.unitNumber} has been updated.`
+          text: `Unit ${unitDraft.unitNumber} has been updated.`
         });
       } else {
-        await unitService.createUnit(payload);
+        await unitService.createUnit(formData);
         await showToast({
           icon: 'success',
           title: 'Unit Added',
-          text: `Unit ${payload.unitNumber} is now available in ${selectedProperty.name}.`
+          text: `Unit ${unitDraft.unitNumber} is now available in ${selectedProperty.name}.`
         });
       }
 
@@ -1027,6 +1166,26 @@ const Dashboard = () => {
     }
   };
 
+  const handleTenantRentUpdate = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+
+    try {
+      await tenantService.updateTenant(editingTenantId, { rentAmount: Number(editingRentAmount) });
+      await showToast({
+        icon: 'success',
+        title: 'Rent Updated',
+        text: 'Tenant rent and current invoice have been synchronized.'
+      });
+      setEditingTenantId(null);
+      loadDashboard();
+    } catch (requestError) {
+      await showErrorAlert('Update Failed', getApiErrorMessage(requestError, 'Failed to update tenant rent.'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleEditUnit = (unit) => {
     setEditingUnitId(unit._id);
     setUnitDraft({
@@ -1034,7 +1193,8 @@ const Dashboard = () => {
       rentAmount: unit.rentAmount ?? '',
       occupancyStatus: unit.occupancyStatus || 'vacant',
       water: unit.meterReadings?.water ?? '',
-      electricity: unit.meterReadings?.electricity ?? ''
+      electricity: unit.meterReadings?.electricity ?? '',
+      images: []
     });
     setShowUnitForm(true);
   };
@@ -1090,6 +1250,81 @@ const Dashboard = () => {
           >
             Apply Again
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  const activeTenantRecord = isTenant ? tenants.find(t => t.user?._id === user.id) : null;
+  const isPendingActivation = isTenant && activeTenantRecord?.status === 'pending_activation';
+  const isExpired = isTenant && activeTenantRecord?.status === 'expired';
+
+  if (isExpired) {
+    return (
+      <div className="dashboard-container pending-view">
+        <div className="pending-card glass-card">
+          <Calendar size={48} className="text-red-500" />
+          <h1>Application Expired</h1>
+          <p>Your approved application has expired as it was not activated within 30 days.</p>
+          <p className="subtext">Please contact management or submit a new application.</p>
+          <button
+            onClick={() => {
+              signOut();
+              navigate('/register');
+            }}
+            className="btn-primary mt-4"
+            type="button"
+          >
+            Start Over
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isPendingActivation) {
+    return (
+      <div className="dashboard-container pending-view">
+        <div className="pending-card glass-card highlight-pulse">
+          <Sparkles size={48} className="text-primary animate-bounce" />
+          <h1>Welcome, {user.name}!</h1>
+          <p>Your application for <strong>{activeTenantRecord.property?.name}</strong>, Unit <strong>{activeTenantRecord.unit}</strong> has been approved.</p>
+          
+          <div className="move-in-summary glass-card mt-6 mb-6">
+            <h4>Move-in Cost Summary</h4>
+            <div className="summary-row">
+              <span>Security Deposit (2x Rent):</span>
+              <strong>{formatCurrency(activeTenantRecord.rentAmount * 2)}</strong>
+            </div>
+            <div className="summary-row">
+              <span>First Month Rent:</span>
+              <strong>{formatCurrency(activeTenantRecord.rentAmount)}</strong>
+            </div>
+            <div className="summary-total mt-2 pt-2 border-t">
+              <span>Total Initial Cost:</span>
+              <strong className="text-secondary">{formatCurrency(activeTenantRecord.rentAmount * 3)}</strong>
+            </div>
+          </div>
+
+          <p className="mt-4">Click below to activate your tenancy and proceed to payment.</p>
+          
+          <div className="activation-actions mt-6">
+            <button
+              onClick={() => handleActivateTenancy(activeTenantRecord._id, true)}
+              className="btn-primary btn-lg w-full mb-3"
+              type="button"
+            >
+              <DollarSign size={20} /> Start Tenancy & Pay Rent/Deposit
+            </button>
+            <button
+              onClick={() => handleActivateTenancy(activeTenantRecord._id, false)}
+              className="btn-secondary w-full"
+              type="button"
+            >
+              Start Tenancy (Pay Later)
+            </button>
+          </div>
+          <p className="subtext text-xs mt-6">Note: This approval must be activated within 30 days to remain valid.</p>
         </div>
       </div>
     );
@@ -1275,11 +1510,19 @@ const Dashboard = () => {
                       <select
                         value={newLease.propertyId}
                         onChange={(event) => {
+                          const selectedPropId = event.target.value;
+                          const prop = properties.find((p) => p._id === selectedPropId);
+                          let penaltyText = '';
+                          if (prop && prop.latePenaltyAmount > 0) {
+                            penaltyText = `Late payment attracts a ${prop.latePenaltyType === 'percentage' ? `${prop.latePenaltyAmount}%` : formatCurrency(prop.latePenaltyAmount)} penalty.`;
+                          }
+
                           setNewLease({
                             ...newLease,
-                            propertyId: event.target.value,
+                            propertyId: selectedPropId,
                             tenantId: '',
-                            unit: ''
+                            unit: '',
+                            penaltyTerms: penaltyText
                           });
                         }}
                         required
@@ -1470,6 +1713,67 @@ const Dashboard = () => {
             </AnimatedSection>
           )}
 
+          {activeWorkspaceSection === 'invoices' && (
+            <AnimatedSection as="section" className="payment-history-section" delay={160}>
+              <div className="section-header">
+                <h2><ScrollText size={20} /> Billing & Invoices</h2>
+              </div>
+              <div className="payment-grid glass-card">
+                {invoices.length > 0 ? (
+                  <table className="payment-table">
+                    <thead>
+                      <tr>
+                        {isManagement && <th>Tenant</th>}
+                        <th>Property</th>
+                        <th>Unit</th>
+                        <th>Amount</th>
+                        <th>Due Date</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {invoices.map((invoice) => (
+                        <tr key={invoice._id}>
+                          {isManagement && <td>{invoice.tenant?.name || 'Unknown'}</td>}
+                          <td>{invoice.property?.name || 'N/A'}</td>
+                          <td>{invoice.unit || 'N/A'}</td>
+                          <td>{formatCurrency(invoice.totalAmount)}</td>
+                          <td>{formatDate(invoice.dueDate)}</td>
+                          <td>
+                            <span className={`status-badge ${invoice.status}`}>
+                              {invoice.status}
+                            </span>
+                          </td>
+                          <td>
+                            {isTenant && invoice.status !== 'paid' && (
+                              <button
+                                className="btn-primary btn-sm"
+                                onClick={() => handleInvoicePayment(invoice)}
+                              >
+                                Pay Now
+                              </button>
+                            )}
+                            {isManagement && invoice.status === 'sent' && (
+                              <span className="text-muted">Awaiting Payment</span>
+                            )}
+                            {invoice.status === 'paid' && (
+                              <span className="text-success">Settled</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="empty-state">
+                    <p>No invoices found.</p>
+                  </div>
+                )}
+              </div>
+            </AnimatedSection>
+          )}
+
           {activeWorkspaceSection === 'portfolio' && (
             <>
               <AnimatedSection as="section" className="property-section" delay={190}>
@@ -1536,6 +1840,49 @@ const Dashboard = () => {
                           required
                         />
                       </div>
+                      <div className="lease-grid">
+                        <div className="form-group">
+                          <label>Normal Unit Price (Rent)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="e.g. 25000"
+                            value={newProperty.defaultUnitPrice}
+                            onChange={(event) => setNewProperty({ ...newProperty, defaultUnitPrice: event.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <div className="lease-grid">
+                        <div className="form-group">
+                          <label>Late Penalty Amount</label>
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="e.g. 500"
+                            value={newProperty.latePenaltyAmount}
+                            onChange={(event) => setNewProperty({ ...newProperty, latePenaltyAmount: event.target.value })}
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label>Penalty Type</label>
+                          <select
+                            value={newProperty.latePenaltyType}
+                            onChange={(event) => setNewProperty({ ...newProperty, latePenaltyType: event.target.value })}
+                          >
+                            <option value="flat">Flat Amount</option>
+                            <option value="percentage">Percentage (%)</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="form-group">
+                        <label>Property Images</label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={(event) => setNewProperty({ ...newProperty, images: Array.from(event.target.files || []) })}
+                        />
+                      </div>
                       <div className="form-actions">
                         <button type="submit" className="btn-primary">
                           {editingPropertyId ? 'Save Changes' : 'Add Property'}
@@ -1582,7 +1929,10 @@ const Dashboard = () => {
                                 address: property.address,
                                 description: property.description || '',
                                 type: property.type || 'apartment',
-                                units: property.units?.join(', ') || ''
+                                units: property.units?.join(', ') || '',
+                                latePenaltyAmount: property.latePenaltyAmount || '',
+                                latePenaltyType: property.latePenaltyType || 'flat',
+                                images: []
                               });
                               setShowPropertyForm(true);
                             }}
@@ -1679,6 +2029,15 @@ const Dashboard = () => {
                             />
                           </div>
                         </div>
+                        <div className="form-group mt-4">
+                          <label>Unit Images</label>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={(event) => setUnitDraft({ ...unitDraft, images: Array.from(event.target.files || []) })}
+                          />
+                        </div>
                         <div className="form-actions">
                           <button type="submit" className="btn-primary" disabled={unitSaving}>
                             {unitSaving ? 'Saving...' : editingUnitId ? 'Save Unit' : 'Create Unit'}
@@ -1692,6 +2051,11 @@ const Dashboard = () => {
                       <div className="unit-grid-modal">
                         {propertyUnits.map((unit) => (
                           <div key={unit._id} className="unit-card glass-card">
+                            {unit.images && unit.images.length > 0 && (
+                              <div className="unit-card-image">
+                                <img src={`/${unit.images[0]}`} alt={`Unit ${unit.unitNumber}`} />
+                              </div>
+                            )}
                             <div className="repair-header">
                               <strong>Unit {unit.unitNumber}</strong>
                               <span className={`status-badge ${unit.occupancyStatus}`}>{unit.occupancyStatus}</span>
@@ -1753,6 +2117,62 @@ const Dashboard = () => {
             />
           )}
 
+          {activeWorkspaceSection === 'tenants' && (
+            <AnimatedSection as="section" className="payment-history-section" delay={240}>
+              <div className="section-header">
+                <h2><Users size={20} /> Resident Directory</h2>
+                <span className="badge">{tenants.length} current</span>
+              </div>
+              <div className="payment-grid glass-card">
+                {tenants.length > 0 ? (
+                  <table className="payment-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Property</th>
+                        <th>Unit</th>
+                        <th>Rent</th>
+                        <th>Joined</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tenants.map((tenant) => (
+                        <tr key={tenant._id}>
+                          <td><strong>{tenant.user?.name}</strong></td>
+                          <td>{tenant.user?.email}</td>
+                          <td>{tenant.user?.phoneNumber || 'N/A'}</td>
+                          <td>{tenant.property?.name}</td>
+                          <td>{tenant.unit}</td>
+                          <td>{formatCurrency(tenant.rentAmount)}</td>
+                          <td className="date">{formatDate(tenant.createdAt)}</td>
+                          <td>
+                            <button
+                              onClick={() => {
+                                setEditingTenantId(tenant._id);
+                                setEditingRentAmount(tenant.rentAmount);
+                              }}
+                              className="btn-secondary btn-sm"
+                              type="button"
+                            >
+                              <DollarSign size={14} /> Edit Rent
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="empty-state">
+                    <p>No active tenants found across your portfolio.</p>
+                  </div>
+                )}
+              </div>
+            </AnimatedSection>
+          )}
+
           {isSuperAdmin && activeWorkspaceSection === 'logs' && (
             <ActivityLogSection logs={auditLogs} />
           )}
@@ -1812,6 +2232,30 @@ const Dashboard = () => {
             </form>
           </AnimatedSection>
 
+          {latestPendingDeposit && (
+            <AnimatedSection as="section" className="payment-actions glass-card deposit-due" delay={120}>
+              <div className="payment-header">
+                <h3><DollarSign size={20} className="text-warning" /> Security Deposit Due</h3>
+                <p>Your lease requires a security deposit before activation is complete.</p>
+              </div>
+              <div className="payment-body">
+                <div className="amount-display">
+                  <span>Deposit Amount:</span>
+                  <h2 className="text-warning">{formatCurrency(latestPendingDeposit.totalAmount)}</h2>
+                </div>
+                <FloatingHint content="Pay your security deposit via M-Pesa.">
+                  <button
+                    onClick={() => handleInvoicePayment(latestPendingDeposit)}
+                    className="btn-primary"
+                    type="button"
+                  >
+                    Pay Deposit with M-Pesa
+                  </button>
+                </FloatingHint>
+              </div>
+            </AnimatedSection>
+          )}
+
           <AnimatedSection as="section" className="payment-actions glass-card" delay={150}>
             <div className="payment-header">
               <h3><DollarSign size={20} /> Rent Payment</h3>
@@ -1820,19 +2264,20 @@ const Dashboard = () => {
             <div className="payment-body">
               <div className="amount-display">
                 <span>Amount Due:</span>
-                <h2>{payments[0] ? formatCurrency(payments[0].amount, payments[0].currency) : '---'}</h2>
+                <h2>{latestPendingInvoice ? formatCurrency(latestPendingInvoice.totalAmount) : '---'}</h2>
               </div>
-              <FloatingHint content="Launch the M-Pesa payment flow for your latest recorded invoice amount.">
+              <FloatingHint content="Launch the M-Pesa payment flow for your latest unpaid invoice.">
                 <button
                   onClick={() => {
-                    setSelectedRentAmount(payments[0]?.amount || 0);
-                    setShowPaymentModal(true);
+                    if (latestPendingInvoice) {
+                      handleInvoicePayment(latestPendingInvoice);
+                    }
                   }}
                   className="btn-primary"
                   type="button"
-                  disabled={!payments[0]}
+                  disabled={!latestPendingInvoice}
                 >
-                  {payments[0] ? 'Pay with M-Pesa' : 'No Invoice Found'}
+                  {latestPendingInvoice ? 'Pay with M-Pesa' : 'No Invoice Found'}
                 </button>
               </FloatingHint>
             </div>
@@ -1858,6 +2303,33 @@ const Dashboard = () => {
                   </button>
                   <button onClick={() => setShowPaymentModal(false)} className="btn-secondary" type="button">Cancel</button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {editingTenantId && (
+            <div className="modal-overlay">
+              <div className="payment-modal glass-card">
+                <h3>Update Monthly Rent</h3>
+                <p>Changing the rent here will automatically update the latest unpaid invoice for this tenant.</p>
+                <form onSubmit={handleTenantRentUpdate}>
+                  <div className="form-group">
+                    <label>New Rent Amount (KSh)</label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 15000"
+                      value={editingRentAmount}
+                      onChange={(event) => setEditingRentAmount(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="modal-actions">
+                    <button className="btn-primary" type="submit" disabled={loading}>
+                      {loading ? 'Updating...' : 'Save & Sync Invoice'}
+                    </button>
+                    <button onClick={() => setEditingTenantId(null)} className="btn-secondary" type="button">Cancel</button>
+                  </div>
+                </form>
               </div>
             </div>
           )}
